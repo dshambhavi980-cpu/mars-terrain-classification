@@ -1,0 +1,729 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mars Terrain Classifier</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f5f5f7;
+      --panel: rgba(255, 255, 255, 0.78);
+      --panel-strong: rgba(255, 255, 255, 0.94);
+      --text: #111114;
+      --muted: #6e6e73;
+      --line: rgba(0, 0, 0, 0.1);
+      --shadow: 0 24px 70px rgba(0, 0, 0, 0.12);
+      --accent: #0071e3;
+      --accent-strong: #0064c8;
+      --success: #19a974;
+      --danger: #c94c4c;
+      --bar: #d8d8de;
+      --radius: 8px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      --sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", sans-serif;
+    }
+
+    [data-theme="dark"] {
+      --bg: #08080a;
+      --panel: rgba(30, 30, 34, 0.72);
+      --panel-strong: rgba(26, 26, 30, 0.94);
+      --text: #f5f5f7;
+      --muted: #a1a1a6;
+      --line: rgba(255, 255, 255, 0.12);
+      --shadow: 0 28px 90px rgba(0, 0, 0, 0.55);
+      --accent: #2997ff;
+      --accent-strong: #147ce5;
+      --success: #30d158;
+      --danger: #ff6b6b;
+      --bar: #303035;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      letter-spacing: 0;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    .shell {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 24px 0 40px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 48px;
+      margin-bottom: 28px;
+    }
+
+    .brand {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .eyebrow {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(32px, 6vw, 66px);
+      line-height: 0.98;
+      font-weight: 720;
+      letter-spacing: 0;
+      max-width: 760px;
+    }
+
+    .theme-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+      min-height: 40px;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--text);
+      background: var(--panel);
+      cursor: pointer;
+      backdrop-filter: blur(18px);
+    }
+
+    .theme-toggle span {
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .theme-dot {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 1px solid var(--line);
+      background: linear-gradient(90deg, #111 50%, #fff 50%);
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .workspace,
+    .side-panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(22px);
+    }
+
+    .workspace {
+      min-height: 560px;
+      padding: 18px;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 16px;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .file-label {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 0 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      color: var(--text);
+      background: var(--panel-strong);
+      font-weight: 650;
+      cursor: pointer;
+    }
+
+    .file-label input {
+      position: absolute;
+      inline-size: 1px;
+      block-size: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .button-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      min-height: 42px;
+      padding: 0 16px;
+      border: 1px solid transparent;
+      border-radius: var(--radius);
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 160ms ease, opacity 160ms ease, background 160ms ease;
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    .btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.48;
+    }
+
+    .primary {
+      color: #fff;
+      background: var(--accent);
+    }
+
+    .primary:hover:not(:disabled) {
+      background: var(--accent-strong);
+    }
+
+    .secondary {
+      color: var(--text);
+      background: var(--panel-strong);
+      border-color: var(--line);
+    }
+
+    .stage {
+      position: relative;
+      min-height: 470px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: color-mix(in srgb, var(--panel-strong) 86%, transparent);
+      display: grid;
+      place-items: center;
+    }
+
+    .empty-state {
+      display: grid;
+      gap: 10px;
+      place-items: center;
+      text-align: center;
+      color: var(--muted);
+      padding: 28px;
+    }
+
+    .empty-icon {
+      width: 58px;
+      height: 58px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      display: grid;
+      place-items: center;
+      color: var(--accent);
+      font-size: 24px;
+      background: var(--panel);
+    }
+
+    .empty-state strong {
+      color: var(--text);
+      font-size: 18px;
+    }
+
+    #preview {
+      width: 100%;
+      height: 100%;
+      max-height: 640px;
+      object-fit: contain;
+      display: none;
+      background: #000;
+    }
+
+    .side-panel {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .panel-heading {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 14px;
+    }
+
+    .panel-heading h2 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.1;
+    }
+
+    .status {
+      min-width: 82px;
+      text-align: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 750;
+      color: var(--muted);
+      background: var(--panel-strong);
+      border: 1px solid var(--line);
+    }
+
+    .status.ready {
+      color: var(--success);
+    }
+
+    .status.error {
+      color: var(--danger);
+    }
+
+    .top-result {
+      min-height: 120px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel-strong);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .top-result .label {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .top-result .class-name {
+      font-size: 28px;
+      line-height: 1;
+      font-weight: 760;
+      overflow-wrap: anywhere;
+    }
+
+    .top-result .confidence {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 13px;
+    }
+
+    .results {
+      display: grid;
+      gap: 12px;
+    }
+
+    .result-row {
+      display: grid;
+      gap: 8px;
+    }
+
+    .row-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .row-meta span:first-child {
+      color: var(--text);
+      overflow-wrap: anywhere;
+    }
+
+    .bar {
+      height: 10px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: var(--bar);
+    }
+
+    .bar-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: inherit;
+      background: var(--accent);
+      transition: width 380ms ease;
+    }
+
+    .meta-grid {
+      display: grid;
+      gap: 8px;
+      margin-top: auto;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 12px;
+      border-top: 1px solid var(--line);
+      padding-top: 14px;
+      overflow-wrap: anywhere;
+    }
+
+    .message {
+      min-height: 20px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .message.error {
+      color: var(--danger);
+    }
+
+    @media (max-width: 900px) {
+      .hero {
+        grid-template-columns: 1fr;
+      }
+
+      .workspace {
+        min-height: 500px;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .shell {
+        width: min(100% - 20px, 1120px);
+        padding-top: 14px;
+      }
+
+      .topbar {
+        align-items: flex-start;
+      }
+
+      .theme-toggle span {
+        display: none;
+      }
+
+      .workspace,
+      .side-panel {
+        padding: 12px;
+      }
+
+      .actions,
+      .button-row,
+      .file-label,
+      .btn {
+        width: 100%;
+      }
+
+      .stage {
+        min-height: 360px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="eyebrow">AI4Mars</div>
+        <h1>Mars Terrain Classifier</h1>
+      </div>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle color theme">
+        <i class="theme-dot" aria-hidden="true"></i>
+        <span id="themeLabel">Auto</span>
+      </button>
+    </header>
+
+    <section class="hero" aria-label="Terrain prediction workspace">
+      <div class="workspace">
+        <div class="actions">
+          <label class="file-label">
+            Select image
+            <input id="imageInput" type="file" accept="image/*" />
+          </label>
+          <div class="button-row">
+            <button class="btn secondary" id="clearBtn" type="button" disabled>Clear</button>
+            <button class="btn primary" id="predictBtn" type="button" disabled>Predict</button>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="empty-state" id="emptyState">
+            <div class="empty-icon" aria-hidden="true">↑</div>
+            <strong>Ready for a terrain image</strong>
+            <span>JPG, PNG, or WebP</span>
+          </div>
+          <img id="preview" alt="Selected Mars terrain preview" />
+        </div>
+      </div>
+
+      <aside class="side-panel" aria-label="Prediction result">
+        <div class="panel-heading">
+          <h2>Prediction</h2>
+          <div class="status" id="statusBadge">Idle</div>
+        </div>
+
+        <div class="top-result">
+          <div class="label">Top class</div>
+          <div class="class-name" id="topClass">-</div>
+          <div class="confidence" id="topConfidence">Awaiting input</div>
+        </div>
+
+        <div class="results" id="resultsList"></div>
+
+        <button class="btn secondary" id="downloadBtn" type="button" disabled>Download result</button>
+
+        <div class="message" id="message"></div>
+
+        <div class="meta-grid">
+          <div id="fileMeta">file: -</div>
+          <div id="timeMeta">time: -</div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <script type="module">
+    import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client/+esm";
+
+    const SPACE_ID = "Shambhavi980/mars_terrain_classification";
+
+    const root = document.documentElement;
+    const imageInput = document.getElementById("imageInput");
+    const preview = document.getElementById("preview");
+    const emptyState = document.getElementById("emptyState");
+    const predictBtn = document.getElementById("predictBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const downloadBtn = document.getElementById("downloadBtn");
+    const statusBadge = document.getElementById("statusBadge");
+    const topClass = document.getElementById("topClass");
+    const topConfidence = document.getElementById("topConfidence");
+    const resultsList = document.getElementById("resultsList");
+    const message = document.getElementById("message");
+    const fileMeta = document.getElementById("fileMeta");
+    const timeMeta = document.getElementById("timeMeta");
+    const themeToggle = document.getElementById("themeToggle");
+    const themeLabel = document.getElementById("themeLabel");
+
+    let clientPromise;
+    let selectedFile = null;
+    let lastResult = null;
+    let themeMode = localStorage.getItem("themeMode") || "auto";
+
+    const formatLabel = (label) => String(label).replaceAll("_", " ");
+    const formatPercent = (value) => `${(Number(value) * 100).toFixed(2)}%`;
+
+    function applyTheme() {
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const effective = themeMode === "auto" ? (prefersDark ? "dark" : "light") : themeMode;
+      root.dataset.theme = effective;
+      themeLabel.textContent = themeMode[0].toUpperCase() + themeMode.slice(1);
+    }
+
+    function setStatus(text, mode = "") {
+      statusBadge.textContent = text;
+      statusBadge.className = `status ${mode}`.trim();
+    }
+
+    function setMessage(text, mode = "") {
+      message.textContent = text;
+      message.className = `message ${mode}`.trim();
+    }
+
+    function getClient() {
+      if (!clientPromise) {
+        clientPromise = Client.connect(SPACE_ID);
+      }
+      return clientPromise;
+    }
+
+    function normalizePrediction(data) {
+      const payload = Array.isArray(data) ? data[0] : data;
+
+      if (payload && Array.isArray(payload.confidences)) {
+        return payload.confidences
+          .map((item) => ({
+            label: item.label,
+            confidence: Number(item.confidence)
+          }))
+          .sort((a, b) => b.confidence - a.confidence);
+      }
+
+      if (payload && typeof payload === "object") {
+        return Object.entries(payload)
+          .map(([label, confidence]) => ({
+            label,
+            confidence: Number(confidence)
+          }))
+          .filter((item) => Number.isFinite(item.confidence))
+          .sort((a, b) => b.confidence - a.confidence);
+      }
+
+      return [];
+    }
+
+    function renderResults(predictions) {
+      resultsList.innerHTML = "";
+
+      if (!predictions.length) {
+        topClass.textContent = "-";
+        topConfidence.textContent = "No prediction returned";
+        return;
+      }
+
+      const best = predictions[0];
+      topClass.textContent = formatLabel(best.label);
+      topConfidence.textContent = formatPercent(best.confidence);
+
+      for (const item of predictions) {
+        const row = document.createElement("div");
+        row.className = "result-row";
+
+        const meta = document.createElement("div");
+        meta.className = "row-meta";
+        meta.innerHTML = `<span>${formatLabel(item.label)}</span><span>${formatPercent(item.confidence)}</span>`;
+
+        const bar = document.createElement("div");
+        bar.className = "bar";
+
+        const fill = document.createElement("div");
+        fill.className = "bar-fill";
+        fill.style.width = `${Math.max(0, Math.min(100, item.confidence * 100))}%`;
+
+        bar.appendChild(fill);
+        row.append(meta, bar);
+        resultsList.appendChild(row);
+      }
+    }
+
+    function resetResult() {
+      lastResult = null;
+      downloadBtn.disabled = true;
+      resultsList.innerHTML = "";
+      topClass.textContent = "-";
+      topConfidence.textContent = selectedFile ? "Ready" : "Awaiting input";
+      timeMeta.textContent = "time: -";
+      setStatus(selectedFile ? "Ready" : "Idle", selectedFile ? "ready" : "");
+      setMessage("");
+    }
+
+    imageInput.addEventListener("change", () => {
+      selectedFile = imageInput.files[0] || null;
+
+      if (!selectedFile) {
+        preview.removeAttribute("src");
+        preview.style.display = "none";
+        emptyState.style.display = "grid";
+        predictBtn.disabled = true;
+        clearBtn.disabled = true;
+        fileMeta.textContent = "file: -";
+        resetResult();
+        return;
+      }
+
+      preview.src = URL.createObjectURL(selectedFile);
+      preview.style.display = "block";
+      emptyState.style.display = "none";
+      predictBtn.disabled = false;
+      clearBtn.disabled = false;
+      fileMeta.textContent = `file: ${selectedFile.name}`;
+      resetResult();
+    });
+
+    clearBtn.addEventListener("click", () => {
+      imageInput.value = "";
+      selectedFile = null;
+      preview.removeAttribute("src");
+      preview.style.display = "none";
+      emptyState.style.display = "grid";
+      predictBtn.disabled = true;
+      clearBtn.disabled = true;
+      fileMeta.textContent = "file: -";
+      resetResult();
+    });
+
+    predictBtn.addEventListener("click", async () => {
+      if (!selectedFile) {
+        return;
+      }
+
+      try {
+        predictBtn.disabled = true;
+        downloadBtn.disabled = true;
+        setStatus("Running");
+        setMessage("Connecting to the model...");
+
+        const client = await getClient();
+        const response = await client.predict("/predict", { image: selectedFile });
+        const predictions = normalizePrediction(response.data);
+        const timestamp = new Date().toISOString();
+
+        lastResult = {
+          fileName: selectedFile.name,
+          generatedAt: timestamp,
+          predictions
+        };
+
+        renderResults(predictions);
+        timeMeta.textContent = `time: ${timestamp}`;
+        setStatus("Done", "ready");
+        setMessage(predictions.length ? "" : "The model returned an unexpected response.", predictions.length ? "" : "error");
+        downloadBtn.disabled = predictions.length === 0;
+      } catch (error) {
+        console.error(error);
+        setStatus("Error", "error");
+        setMessage(error.message || "Prediction failed.", "error");
+      } finally {
+        predictBtn.disabled = !selectedFile;
+      }
+    });
+
+    downloadBtn.addEventListener("click", () => {
+      if (!lastResult) {
+        return;
+      }
+
+      const blob = new Blob([JSON.stringify(lastResult, null, 2)], {
+        type: "application/json"
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `mars-terrain-result-${Date.now()}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    });
+
+    themeToggle.addEventListener("click", () => {
+      themeMode = themeMode === "auto" ? "dark" : themeMode === "dark" ? "light" : "auto";
+      localStorage.setItem("themeMode", themeMode);
+      applyTheme();
+    });
+
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
+    applyTheme();
+  </script>
+</body>
+</html>
