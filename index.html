@@ -503,10 +503,9 @@
     </section>
   </main>
 
-  <script type="module">
-    import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client/+esm";
-
-    const SPACE_ID = "Shambhavi980/mars_terrain_classification";
+  <script>
+    const SPACE_URL = "https://shambhavi980-mars-terrain-classification.hf.space";
+    const PREDICT_URL = `${SPACE_URL}/gradio_api/call/predict`;
 
     const root = document.documentElement;
     const imageInput = document.getElementById("imageInput");
@@ -525,7 +524,6 @@
     const themeToggle = document.getElementById("themeToggle");
     const themeLabel = document.getElementById("themeLabel");
 
-    let clientPromise;
     let selectedFile = null;
     let lastResult = null;
     let themeMode = localStorage.getItem("themeMode") || "auto";
@@ -550,11 +548,65 @@
       message.className = `message ${mode}`.trim();
     }
 
-    function getClient() {
-      if (!clientPromise) {
-        clientPromise = Client.connect(SPACE_ID);
+    function fileToDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function predictWithSpace(file) {
+      const dataUrl = await fileToDataUrl(file);
+      const payload = {
+        data: [
+          {
+            path: null,
+            url: dataUrl,
+            size: file.size,
+            orig_name: file.name,
+            mime_type: file.type || "image/jpeg",
+            is_stream: false,
+            meta: { _type: "gradio.FileData" }
+          }
+        ]
+      };
+
+      const submitResponse = await fetch(PREDICT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "omit",
+        body: JSON.stringify(payload)
+      });
+
+      if (!submitResponse.ok) {
+        throw new Error(`Prediction request failed (${submitResponse.status})`);
       }
-      return clientPromise;
+
+      const submitData = await submitResponse.json();
+      if (!submitData.event_id) {
+        throw new Error("The model did not return a prediction event.");
+      }
+
+      const resultResponse = await fetch(`${PREDICT_URL}/${submitData.event_id}`, {
+        credentials: "omit"
+      });
+
+      if (!resultResponse.ok) {
+        throw new Error(`Prediction result failed (${resultResponse.status})`);
+      }
+
+      const resultText = await resultResponse.text();
+      const dataLine = resultText
+        .split("\n")
+        .find((line) => line.startsWith("data: "));
+
+      if (!dataLine) {
+        throw new Error("The model returned an empty prediction result.");
+      }
+
+      return JSON.parse(dataLine.slice(6));
     }
 
     function normalizePrediction(data) {
@@ -673,9 +725,8 @@
         setStatus("Running");
         setMessage("Connecting to the model...");
 
-        const client = await getClient();
-        const response = await client.predict("/predict", { image: selectedFile });
-        const predictions = normalizePrediction(response.data);
+        const responseData = await predictWithSpace(selectedFile);
+        const predictions = normalizePrediction(responseData);
         const timestamp = new Date().toISOString();
 
         lastResult = {
